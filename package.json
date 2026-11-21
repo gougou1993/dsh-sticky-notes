@@ -1,7 +1,10 @@
 {
-  "name": "dsh-sticky-notes-new",
+  "name": "@oakzhong/dsh-sticky-notes",
   "version": "1.0.0",
   "private":false,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "description": "A sticky notes panel with a left sidebar entry.",
   "exports": {
