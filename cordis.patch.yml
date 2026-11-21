@@ -1,0 +1,5 @@
+# Sticky notes bundle: the Host half is a no-op; the Client half renders the
+# left sidebar entry and its panel.
+- insert:
+    - id: dsh-sticky-notes
+      name: dsh-sticky-notes
