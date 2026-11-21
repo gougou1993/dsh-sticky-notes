@@ -2,4 +2,4 @@
 # left sidebar entry and its panel.
 - insert:
     - id: dsh-sticky-notes
-      name: dsh-sticky-notes
+      name: '@oakzhong/dsh-sticky-notes'

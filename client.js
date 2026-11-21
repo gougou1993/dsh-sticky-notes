@@ -7,7 +7,7 @@
  * interpreted as HTML.
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-sticky-notes',
+  id: '@oakzhong/dsh-sticky-notes',
   factory(require) {
     const React = require('react')
     const h = React.createElement

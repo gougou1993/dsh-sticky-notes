@@ -1,7 +1,7 @@
 {
   "name": "@oakzhong/dsh-sticky-notes",
-  "version": "1.0.0",
-  "private":false,
+  "version": "1.0.1",
+  "private": false,
   "publishConfig": {
     "access": "public"
   },
