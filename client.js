@@ -40,6 +40,10 @@ window.__ModuleLoader__.load({
       clearAll: '清空全部',
       clearConfirm: '确定清空所有便利贴吗？',
       zoomOut: '缩小', zoomIn: '放大', zoomReset: '重置缩放', zoom: '缩放',
+      pin: '置顶', unpin: '取消置顶',
+      export: '导出', import: '导入', exportOk: '已导出 {count} 张便利贴', importOk: '成功导入 {count} 张便利贴',
+      importFail: '导入失败：文件格式不正确', confirmImport: '导入将追加到现有便利贴，继续？',
+      nothingToExport: '没有可导出的便利贴',
     }
     const en = {
       title: 'Sticky notes',
@@ -60,6 +64,10 @@ window.__ModuleLoader__.load({
       clearAll: 'Clear all',
       clearConfirm: 'Clear all sticky notes?',
       zoomOut: 'Zoom out', zoomIn: 'Zoom in', zoomReset: 'Reset zoom', zoom: 'Zoom',
+      pin: 'Pin', unpin: 'Unpin',
+      export: 'Export', import: 'Import', exportOk: 'Exported {count} notes', importOk: 'Imported {count} notes',
+      importFail: 'Import failed: invalid file format', confirmImport: 'Import will append to existing notes. Continue?',
+      nothingToExport: 'Nothing to export',
     }
 
     let t = (key) => (zh[key] || key)
@@ -122,6 +130,11 @@ window.__ModuleLoader__.load({
 .dshNotes-zoomLabel:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .dshNotes-grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px;align-content:start;padding:4px 4px 24px}
 .dshNotes-note{position:relative;display:flex;flex-direction:column;min-height:230px;border-radius:5px 5px 12px 12px;padding:18px 18px 12px;box-sizing:border-box;box-shadow:0 4px 14px rgba(0,0,0,.16);color:#3a3222}
+.dshNotes-note.dshNotes-pinned{box-shadow:0 4px 18px rgba(214,158,46,.55);outline:2px solid rgba(214,158,46,.7)}
+.dshNotes-pin{position:absolute;top:6px;right:6px;z-index:2;border:0;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:2px;border-radius:5px;opacity:.55}
+.dshNotes-pin:hover{opacity:1}
+.dshNotes-pinOn{opacity:1}
+.dshNotes-heading{padding-right:26px}
 .dshNotes-note:after{content:"";position:absolute;left:0;right:0;bottom:0;height:10px;background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(0,0,0,.10));border-radius:0 0 10px 10px;pointer-events:none}
 .dshNotes-heading{flex:0 0 auto;border:0;outline:0;background:transparent;color:inherit;font-family:inherit;font-size:18px;font-weight:700;line-height:1.4;width:100%;box-sizing:border-box;padding:0 0 8px;border-bottom:1px solid rgba(0,0,0,.12)}
 .dshNotes-heading::placeholder{color:rgba(58,50,34,.55)}
@@ -175,7 +188,12 @@ window.__ModuleLoader__.load({
     }
 
     function NoteCard({ note, onChange, onDelete }) {
-      return h('div', { className: 'dshNotes-note', style: { background: note.color } },
+      return h('div', { className: 'dshNotes-note' + (note.pinned ? ' dshNotes-pinned' : ''), style: { background: note.color } },
+        h('button', {
+          type: 'button', className: 'dshNotes-pin' + (note.pinned ? ' dshNotes-pinOn' : ''),
+          title: note.pinned ? t('unpin') : t('pin'), 'aria-label': note.pinned ? t('unpin') : t('pin'),
+          onClick: () => onChange({ pinned: !note.pinned }),
+        }, note.pinned ? '📌' : '📍'),
         h('input', {
           className: 'dshNotes-heading', type: 'text',
           value: note.heading,
@@ -214,11 +232,50 @@ window.__ModuleLoader__.load({
       const [notes, setNotes] = useState(readNotes)
       const [query, setQuery] = useState('')
       const [zoom, setZoom] = useState(1)
+      const fileRef = useRef(null)
       const first = useRef(true)
       useEffect(() => {
         if (first.current) { first.current = false; return }
         writeNotes(notes)
       }, [notes])
+
+      const exportNotes = useCallback(() => {
+        if (!notes.length) { window.alert(t('nothingToExport')); return }
+        const doc = { app: 'dsh-sticky-notes', version: 2, exportedAt: new Date().toISOString(), notes }
+        try {
+          const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json;charset=utf-8' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url; a.download = 'sticky-notes.json'
+          document.body.appendChild(a); a.click(); a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+          window.alert(fmt(t('exportOk'), { count: notes.length }))
+        } catch (e) { window.alert(e.message) }
+      }, [notes])
+
+      const importNotes = useCallback(async (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        try {
+          const doc = JSON.parse(await file.text())
+          const list = Array.isArray(doc) ? doc : (doc && Array.isArray(doc.notes) ? doc.notes : null)
+          if (!list) { window.alert(t('importFail')); e.target.value = ''; return }
+          if (!window.confirm(t('confirmImport'))) { e.target.value = ''; return }
+          const now = Date.now()
+          const clean = list.filter((n) => n && typeof n === 'object').map((n, i) => ({
+            id: makeId(),
+            heading: String(n.heading || ''),
+            text: String(n.text || ''),
+            color: COLORS.indexOf(n.color) >= 0 ? n.color : COLORS[i % COLORS.length],
+            pinned: Boolean(n.pinned),
+            createdAt: Number(n.createdAt) || now,
+            updatedAt: Number(n.updatedAt) || now,
+          }))
+          setNotes((prev) => [...clean, ...prev])
+          window.alert(fmt(t('importOk'), { count: clean.length }))
+        } catch (_) { window.alert(t('importFail')) }
+        e.target.value = ''
+      }, [])
 
       const addNote = useCallback(() => {
         const now = Date.now()
@@ -237,11 +294,14 @@ window.__ModuleLoader__.load({
 
       const filtered = useMemo(() => {
         const q = query.trim().toLowerCase()
-        if (!q) return notes
-        return notes.filter((n) =>
-          (n.heading || '').toLowerCase().indexOf(q) >= 0 ||
-          n.text.toLowerCase().indexOf(q) >= 0
-        )
+        const match = q
+          ? notes.filter((n) =>
+              (n.heading || '').toLowerCase().indexOf(q) >= 0 ||
+              n.text.toLowerCase().indexOf(q) >= 0
+            )
+          : notes.slice()
+        // Pinned notes first, then preserve the original order within each group.
+        return match.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
       }, [notes, query])
 
       return h('div', { className: 'dshNotes-root' },
@@ -256,6 +316,9 @@ window.__ModuleLoader__.load({
             onChange: (e) => setQuery(e.target.value),
           }),
           h('button', { type: 'button', className: 'dshNotes-btn dshNotes-btn-primary', onClick: addNote }, '+ ' + t('add')),
+          h('button', { type: 'button', className: 'dshNotes-btn', title: t('export'), onClick: exportNotes }, t('export')),
+          h('button', { type: 'button', className: 'dshNotes-btn', title: t('import'), onClick: () => fileRef.current && fileRef.current.click() }, t('import')),
+          h('input', { ref: fileRef, type: 'file', accept: '.json,application/json', style: { display: 'none' }, onChange: importNotes }),
           h('div', { className: 'dshNotes-zoom' },
             h('button', { type: 'button', className: 'dshNotes-btn', title: t('zoomOut'), onClick: zoomOut }, '−'),
             h('button', { type: 'button', className: 'dshNotes-zoomLabel', title: t('zoomReset'), onClick: zoomReset }, Math.round(zoom * 100) + '%'),
